@@ -4,9 +4,19 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"sync"
+	"time"
+
+	"github.com/joho/godotenv"
 )
+
+func handler(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Hi there, I love %s!", r.URL.Path[1:])
+}
 
 // run handles the actual execution of the program. It's separated from main to allow for:
 // 1. Proper error handling (since main can't return errors)
@@ -25,6 +35,12 @@ func run(ctx context.Context, w io.Writer, args []string, getenv func(string) st
 	// Ensure we call cancel() when the function returns to clean up resources
 	defer cancel()
 
+	// Getting env file locally
+	err := godotenv.Load()
+	if err != nil {
+		return fmt.Errorf("error loading .env file: %w", err)
+	}
+
 	// Example of using getenv (I'll add more environment variables later)
 	apiKey := getenv("TFL_API_KEY")
 	if apiKey == "" {
@@ -32,6 +48,32 @@ func run(ctx context.Context, w io.Writer, args []string, getenv func(string) st
 	}
 
 	// TODO: Add server setup and main loop here
+
+	http.HandleFunc("/", handler)
+
+	httpServer := &http.Server{
+		Addr:    ":8080",
+		Handler: http.DefaultServeMux,
+	}
+	go func() {
+		log.Printf("listening on %s\n", httpServer.Addr)
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			fmt.Fprintf(os.Stderr, "error listening and serving: %s\n", err)
+		}
+	}()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-ctx.Done()
+		shutdownCtx := context.Background()
+		shutdownCtx, cancel := context.WithTimeout(shutdownCtx, 10*time.Second)
+		defer cancel()
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "error shutting down http server: %s\n", err)
+		}
+	}()
+	wg.Wait()
 
 	return nil // For now, just return nil (no error)
 }
