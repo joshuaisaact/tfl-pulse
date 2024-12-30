@@ -60,7 +60,7 @@ func ProcessPredictions(predictions []tfl.Prediction) TrainMap {
 	for _, p := range predictions {
 		if _, ok := trainMap[p.VehicleID]; !ok {
 			trainMap[p.VehicleID] = TrainInfo{
-				Location: parseLocation(p.CurrentLocation)
+				Location:  parseLocation(p.CurrentLocation),
 				Direction: determineDirection(p.Towards),
 			}
 		}
