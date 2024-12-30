@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -17,6 +18,26 @@ import (
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Hi there, I love %s!", r.URL.Path[1:])
+}
+
+func getViccy(w http.ResponseWriter, r *http.Request) {
+	apiKey := os.Getenv("TFL_API_KEY")
+	if apiKey == "" {
+		http.Error(w, "TFL_API_KEY environment variable is required", http.StatusInternalServerError)
+		return
+	}
+
+	client := tfl.NewClient(apiKey)
+
+	predictions, err := client.GetVictoriaPredictions(r.Context())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get Victoria Line predictions: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(predictions)
 }
 
 // run handles the actual execution of the program. It's separated from main to allow for:
@@ -64,6 +85,7 @@ func run(ctx context.Context, w io.Writer, args []string, getenv func(string) st
 	// TODO: Add server setup and main loop here
 
 	http.HandleFunc("/", handler)
+	http.HandleFunc("/viccy", getViccy)
 
 	httpServer := &http.Server{
 		Addr:    ":8080",
