@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/joshuaisaact/tfl-pulse/backend/internal/tfl"
 )
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -41,10 +42,23 @@ func run(ctx context.Context, w io.Writer, args []string, getenv func(string) st
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 
-	// Example of using getenv (I'll add more environment variables later)
+	// Get the API key from the environment
 	apiKey := getenv("TFL_API_KEY")
 	if apiKey == "" {
 		return fmt.Errorf("TFL_API_KEY environment variable is required")
+	}
+
+	// Initialize the client
+	client := tfl.NewClient(apiKey)
+
+	predictions, err := client.GetVictoriaPredictions(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get Victoria line predictions: %w", err)
+	}
+
+	fmt.Fprintln(w, "Predictions fetched:")
+	for _, prediction := range predictions {
+		fmt.Fprintf(w, "%+v\n", prediction)
 	}
 
 	// TODO: Add server setup and main loop here
@@ -55,14 +69,17 @@ func run(ctx context.Context, w io.Writer, args []string, getenv func(string) st
 		Addr:    ":8080",
 		Handler: http.DefaultServeMux,
 	}
+
 	go func() {
 		log.Printf("listening on %s\n", httpServer.Addr)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			fmt.Fprintf(os.Stderr, "error listening and serving: %s\n", err)
 		}
 	}()
+
 	var wg sync.WaitGroup
 	wg.Add(1)
+
 	go func() {
 		defer wg.Done()
 		<-ctx.Done()
@@ -73,9 +90,10 @@ func run(ctx context.Context, w io.Writer, args []string, getenv func(string) st
 			fmt.Fprintf(os.Stderr, "error shutting down http server: %s\n", err)
 		}
 	}()
+
 	wg.Wait()
 
-	return nil // For now, just return nil (no error)
+	return nil
 }
 
 // main is the entry point of the program.
