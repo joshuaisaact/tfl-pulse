@@ -13,6 +13,14 @@ const (
 	Southbound Direction = false
 )
 
+func (d Direction) String() string {
+	if d == Northbound {
+		return "Northbound"
+	} else {
+		return "Southbound"
+	}
+}
+
 type Location struct {
 	Station     string
 	IsBetween   bool
@@ -20,8 +28,9 @@ type Location struct {
 }
 
 type TrainInfo struct {
-	Location  Location
-	Direction Direction
+	Location     Location
+	Direction    Direction
+	DirectionStr string
 }
 
 // This will map vehicle id to Train Info
@@ -55,9 +64,11 @@ func ProcessPredictions(predictions []tfl.Prediction) TrainMap {
 	trainMap := map[string]TrainInfo{}
 	for _, p := range predictions {
 		if _, ok := trainMap[p.VehicleID]; !ok {
+			direction := determineDirection(p.Towards)
 			trainMap[p.VehicleID] = TrainInfo{
-				Location:  parseLocation(p.CurrentLocation),
-				Direction: determineDirection(p.Towards),
+				Location:     parseLocation(p.CurrentLocation),
+				Direction:    direction,
+				DirectionStr: direction.String(),
 			}
 		}
 	}

@@ -54,6 +54,11 @@ func handleTrains(client *tfl.Client) http.HandlerFunc {
 
 		trainMap := trains.ProcessPredictions(predictions)
 
+		for vehicleID, trainInfo := range trainMap {
+			// Print the direction as a human-readable string
+			fmt.Printf("Vehicle ID: %s, Location: %s, Direction: %s\n", vehicleID, trainInfo.Location.Station, trainInfo.Direction.String())
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(trainMap)
