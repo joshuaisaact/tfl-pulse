@@ -2,43 +2,17 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/joshuaisaact/tfl-pulse/backend/internal/tfl"
 )
-
-func handler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Hi there, I love %s!", r.URL.Path[1:])
-}
-
-func getViccy(w http.ResponseWriter, r *http.Request) {
-	apiKey := os.Getenv("TFL_API_KEY")
-	if apiKey == "" {
-		http.Error(w, "TFL_API_KEY environment variable is required", http.StatusInternalServerError)
-		return
-	}
-
-	client := tfl.NewClient(apiKey)
-
-	predictions, err := client.GetVictoriaPredictions(r.Context())
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get Victoria Line predictions: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(predictions)
-}
 
 // run handles the actual execution of the program. It's separated from main to allow for:
 // 1. Proper error handling (since main can't return errors)
@@ -58,8 +32,7 @@ func run(ctx context.Context, w io.Writer, args []string, getenv func(string) st
 	defer cancel()
 
 	// Getting env file locally
-	err := godotenv.Load()
-	if err != nil {
+	if err := godotenv.Load(); err != nil {
 		return fmt.Errorf("error loading .env file: %w", err)
 	}
 
@@ -72,48 +45,34 @@ func run(ctx context.Context, w io.Writer, args []string, getenv func(string) st
 	// Initialize the client
 	client := tfl.NewClient(apiKey)
 
-	predictions, err := client.GetVictoriaPredictions(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get Victoria line predictions: %w", err)
-	}
+	// Create server mux and add routes
+	mux := http.NewServeMux()
+	addRoutes(mux, client)
 
-	fmt.Fprintln(w, "Predictions fetched:")
-	for _, prediction := range predictions {
-		fmt.Fprintf(w, "%+v\n", prediction)
-	}
-
-	// TODO: Add server setup and main loop here
-
-	http.HandleFunc("/", handler)
-	http.HandleFunc("/viccy", getViccy)
-
+	// Create HTTP server
 	httpServer := &http.Server{
 		Addr:    ":8080",
-		Handler: http.DefaultServeMux,
+		Handler: mux,
 	}
 
+	// Start server
 	go func() {
-		log.Printf("listening on %s\n", httpServer.Addr)
+		log.Printf("Server active and listening on %s\n", httpServer.Addr)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			fmt.Fprintf(os.Stderr, "error listening and serving: %s\n", err)
 		}
 	}()
 
-	var wg sync.WaitGroup
-	wg.Add(1)
+	// Wait for interrupt
+	<-ctx.Done()
 
-	go func() {
-		defer wg.Done()
-		<-ctx.Done()
-		shutdownCtx := context.Background()
-		shutdownCtx, cancel := context.WithTimeout(shutdownCtx, 10*time.Second)
-		defer cancel()
-		if err := httpServer.Shutdown(shutdownCtx); err != nil {
-			fmt.Fprintf(os.Stderr, "error shutting down http server: %s\n", err)
-		}
-	}()
+	// Graceful shutdown
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
 
-	wg.Wait()
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("error shutting down http server: %w", err)
+	}
 
 	return nil
 }

@@ -41,17 +41,13 @@ func parseLocation(loc string) Location {
 			PrevStation: stations[0],
 		}
 	} else {
-		stations := strings.Split(loc, "At ")
+		// stations := strings.Split(loc, "At ")
 		return Location{
-			Station:     stations[0],
+			Station:     loc,
 			IsBetween:   false,
 			PrevStation: "",
 		}
 	}
-}
-
-func determineBetween(between string) bool {
-	return strings.Contains(between, "Between")
 }
 
 func ProcessPredictions(predictions []tfl.Prediction) TrainMap {
