@@ -11,7 +11,7 @@ import (
 )
 
 type Poller struct {
-	client    tfl.Client
+	client    *tfl.Client
 	trainData map[string]trains.TrainInfo
 	mu        sync.RWMutex
 }
