@@ -26,7 +26,7 @@ func TestProcessPredictions(t *testing.T) {
 	}
 
 	if train, ok := trainMap["123"]; ok {
-		if !train.Direction {
+		if train.DirectionStr != "Northbound" {
 			t.Errorf("Train 123 should be Northbound")
 		}
 		if train.Location.Station != "Victoria" {
@@ -40,8 +40,8 @@ func TestProcessPredictions(t *testing.T) {
 	}
 
 	if train, ok := trainMap["456"]; ok {
-		if !train.Direction {
-			t.Errorf("Train 456 should be southbound")
+		if train.DirectionStr != "Southbound" {
+			t.Errorf("Train 456 should be Southbound")
 		}
 		if train.Location.Station != "Oxford Circus" {
 			t.Errorf("Train 456 should be at Oxford Circus, got %s", train.Location.Station)
