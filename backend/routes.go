@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 
+	"github.com/joshuaisaact/tfl-pulse/backend/internal/poller"
 	"github.com/joshuaisaact/tfl-pulse/backend/internal/tfl"
 	"github.com/joshuaisaact/tfl-pulse/backend/internal/trains"
 )
@@ -13,6 +15,19 @@ func addRoutes(
 	mux *http.ServeMux,
 	client *tfl.Client,
 ) {
+	// Create hub and poller
+	poller := poller.New(client)
+
+	hub := NewHub(poller)
+
+	poller.SetUpdateCallback(hub.broadcastTrains)
+
+	// Start polling in background
+	go poller.Start(context.Background())
+
+	// Websocket endpoint
+	mux.HandleFunc("/ws", hub.handleWebSocket)
+
 	mux.HandleFunc("/api/victoria", handleVictoria(client))
 	mux.HandleFunc("/api/trains", handleTrains(client))
 	mux.Handle("/", http.NotFoundHandler())

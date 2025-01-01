@@ -14,7 +14,8 @@ const (
 	AtPlatform                    // Train is stopped at the platform
 	Between                       // Train is between stations
 	Approaching                   // Train is approaching next station
-	Departed                      // Train has just left a station
+	Left                          // Train has just left a station
+	Departed                      // Train has just departed a station
 )
 
 var stateStrings = map[TrainState]string{
@@ -23,6 +24,7 @@ var stateStrings = map[TrainState]string{
 	AtPlatform:  "AT_PLATFORM",
 	Between:     "BETWEEN",
 	Approaching: "APPROACHING",
+	Left:        "LEFT",
 	Departed:    "DEPARTED",
 }
 
@@ -50,11 +52,12 @@ func (s *TrainState) UnmarshalJSON(data []byte) error {
 }
 
 // DetectState determines the train state from a location description
-// Returns Unknown if the location format is unexpected
+
 func DetectState(location string) TrainState {
 	if location == "" {
 		return Unknown
 	}
+
 	location = strings.TrimSpace(location)
 
 	switch {
@@ -67,6 +70,8 @@ func DetectState(location string) TrainState {
 	case strings.HasPrefix(location, "Approaching "):
 		return Approaching
 	case strings.HasPrefix(location, "Left "):
+		return Left
+	case strings.HasPrefix(location, "Departed "):
 		return Departed
 	default:
 		return Unknown

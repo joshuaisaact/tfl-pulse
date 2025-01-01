@@ -22,107 +22,99 @@ func (d Direction) String() string {
 }
 
 type Location struct {
-	Station     string
-	IsBetween   bool
-	PrevStation string
+	StationID     string
+	IsBetween     bool
+	PrevStationID string
+	State         TrainState
 }
 
 type TrainInfo struct {
-	Location     Location
-	Direction    Direction
-	DirectionStr string
+	Location   Location
+	Direction  string
+	TimeToNext int
 }
 
-// This will map vehicle id to Train Info
 type TrainMap map[string]TrainInfo
 
-func determineDirection(towards string) Direction {
-	return towards == "Walthamstow Central"
-}
-
-func parseLocation(loc string) Location {
-	if strings.Contains(loc, "Between") {
-		parts := strings.Split(loc, "Between ")
-		stations := strings.Split(parts[1], " and ")
-		return Location{
-			Station:     stations[1],
-			IsBetween:   true,
-			PrevStation: stations[0],
+func extractStationsFromLocation(text string) (string, string) {
+	switch {
+	case strings.HasPrefix(text, "Between "):
+		parts := strings.Split(strings.TrimPrefix(text, "Between "), " and ")
+		if len(parts) == 2 {
+			return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
 		}
-	} else if strings.Contains(loc, "At") {
-		stations := strings.Split(loc, "At ")
-		return Location{
-			Station:     stations[1],
-			IsBetween:   false,
-			PrevStation: "",
+	case strings.HasPrefix(text, "Left "), strings.HasPrefix(text, "Departed "):
+		// For Left/Departed, the station mentioned is the previous station
+		station := ""
+		if strings.HasPrefix(text, "Left ") {
+			station = strings.TrimPrefix(text, "Left ")
+		} else {
+			station = strings.TrimPrefix(text, "Departed ")
 		}
-	} else if strings.Contains(loc, "Approaching") {
-		stations := strings.Split(loc, "Approaching ")
-		return Location{
-			Station:     stations[1],
-			IsBetween:   false,
-			PrevStation: "",
-		}
-	} else {
-		return Location{
-			Station:     loc,
-			IsBetween:   false,
-			PrevStation: "",
-		}
+		station = strings.TrimSpace(station)
+		return station, ""
+	case strings.HasPrefix(text, "Approaching "):
+		// For Approaching, the station mentioned is the next station
+		station := strings.TrimSpace(strings.TrimPrefix(text, "Approaching "))
+		return "", station
 	}
+	return "", ""
 }
 
-// func parseLocation(loc string):
-//     // First detect the "state" of the train
-//     state := detectState(loc)  // Could return enum/string like AT, BETWEEN, APPROACHING, DEPARTED, etc
+func parseLocation(p tfl.Prediction) Location {
+	state := DetectState(p.CurrentLocation)
+	loc := Location{
+		StationID: p.StationName,
+		State:     state,
+		IsBetween: state == Between || state == Left || state == Departed,
+	}
 
-//     switch state:
-//         case "BETWEEN":
-//             // Current approach works fine
-//             parts := split "Between "
-//             stations := split " and "
-//             return Location{stations[1], true, stations[0]}
+	// Get previous and next stations based on state
+	prev, next := extractStationsFromLocation(p.CurrentLocation)
 
-//         case "AT_PLATFORM":
-//             // Need to get station from prediction.stationName instead
-//             // Because "At Platform" doesn't tell us which station
-//             return Location{stationName, false, ""}
+	switch state {
+	case Between:
+		loc.PrevStationID = prev
+		loc.StationID = next // Update current to next station
+	case Left, Departed:
+		loc.PrevStationID = prev // The station we just left
+		loc.StationID = prev     // Current position is still closest to prev
+	case Approaching:
+		loc.StationID = next // Update to station we're approaching
+	case AtStation, AtPlatform:
+		// Keep stationID from prediction
+	}
 
-//         case "AT":
-//             if strings.Contains(loc, "Platform"):
-//                 // Handle "At Platform 5" case
-//                 return Location{stationName, false, ""}
-//             else:
-//                 // Handle "At Victoria" case
-//                 station := split "At "
-//                 return Location{station, false, ""}
-
-//         case "DEPARTED", "LEFT":
-//             // Just left a station, could track this state
-//             station := split "Departed/Left "
-//             return Location{station, true, station}  // Maybe mark as between?
-
-//         case "APPROACHING":
-//             // Almost at next station
-//             station := split "Approaching "
-//             return Location{station, false, ""}
-
-//         default:
-//             // Unknown state, just use the raw location
-//             return Location{loc, false, ""}
+	return loc
+}
 
 func ProcessPredictions(predictions []tfl.Prediction) TrainMap {
-	// TODO: Transform predictions into simple TrainMap MVP
-	trainMap := map[string]TrainInfo{}
+	trains := make(TrainMap)
+
+	// First, group predictions by vehicle ID to find minimum time
+	predictionsByVehicle := make(map[string][]tfl.Prediction)
 	for _, p := range predictions {
-		if _, ok := trainMap[p.VehicleID]; !ok {
-			direction := determineDirection(p.Towards)
-			trainMap[p.VehicleID] = TrainInfo{
-				Location:     parseLocation(p.CurrentLocation),
-				Direction:    direction,
-				DirectionStr: direction.String(),
+		predictionsByVehicle[p.VehicleID] = append(predictionsByVehicle[p.VehicleID], p)
+	}
+
+	// Then process each vehicle's predictions
+	for vehicleID, vehiclePredictions := range predictionsByVehicle {
+		// Find prediction with minimum TimeToStation
+		minTimeIdx := 0
+		for i, p := range vehiclePredictions {
+			if p.TimeToStation < vehiclePredictions[minTimeIdx].TimeToStation {
+				minTimeIdx = i
 			}
 		}
+
+		// Use the prediction with minimum time
+		p := vehiclePredictions[minTimeIdx]
+		trains[vehicleID] = TrainInfo{
+			Location:   parseLocation(p),
+			Direction:  p.Towards,
+			TimeToNext: p.TimeToStation,
+		}
 	}
-	return trainMap
+
+	return trains
 }
