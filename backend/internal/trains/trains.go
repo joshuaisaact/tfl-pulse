@@ -6,20 +6,10 @@ import (
 	"github.com/joshuaisaact/tfl-pulse/backend/internal/tfl"
 )
 
-type Direction bool
-
 const (
-	Northbound Direction = true
-	Southbound Direction = false
+	DirectionNorth = "Northbound"
+	DirectionSouth = "Southbound"
 )
-
-func (d Direction) String() string {
-	if d == Northbound {
-		return "Northbound"
-	} else {
-		return "Southbound"
-	}
-}
 
 type Location struct {
 	StationID     string
@@ -31,10 +21,18 @@ type Location struct {
 type TrainInfo struct {
 	Location   Location
 	Direction  string
+	Towards    string
 	TimeToNext int
 }
 
 type TrainMap map[string]TrainInfo
+
+func getDirection(towards string) string {
+	if towards == "Walthamstow Central" {
+		return DirectionNorth
+	}
+	return DirectionSouth
+}
 
 func extractStationsFromLocation(text string) (string, string) {
 	switch {
@@ -111,7 +109,8 @@ func ProcessPredictions(predictions []tfl.Prediction) TrainMap {
 		p := vehiclePredictions[minTimeIdx]
 		trains[vehicleID] = TrainInfo{
 			Location:   parseLocation(p),
-			Direction:  p.Towards,
+			Direction:  getDirection(p.Towards),
+			Towards:    p.Towards,
 			TimeToNext: p.TimeToStation,
 		}
 	}
