@@ -1,74 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
 
-interface Location {
-    StationID: string;
-    IsBetween: boolean;
-    PrevStationID: string;
-    State: 'AT_STATION' | 'BETWEEN' | 'APPROACHING';
-}
 
-interface TrainInfo {
-    Location: Location;
-    Direction: string;
-    TimeToNext: number;
-}
+import { useTrains } from '@/hooks/useTrains';
 
-interface TrainMap {
-    [key: string]: TrainInfo;
-}
-
-const TrainList = () => {
-  const [trains, setTrains] = useState<TrainMap>({});
-  const [connectionStatus, setConnectionStatus] = useState('connecting');
-
-  useEffect(() => {
-      let ws: WebSocket | null = null;
-      let reconnectTimeout: NodeJS.Timeout;
-
-      const connect = () => {
-          ws = new WebSocket('ws://localhost:8080/ws');
-
-          ws.onopen = () => {
-              console.log('Connected to WebSocket');
-              setConnectionStatus('connected');
-          };
-
-          ws.onmessage = (event) => {
-              try {
-                  const data = JSON.parse(event.data);
-                  setTrains(data);
-              } catch (error) {
-                  console.error('Error parsing websocket data:', error);
-              }
-          };
-
-          ws.onclose = () => {
-              console.log('WebSocket closed, attempting to reconnect...');
-              setConnectionStatus('reconnecting');
-              // Try to reconnect in 3 seconds
-              reconnectTimeout = setTimeout(connect, 3000);
-          };
-
-          ws.onerror = (error) => {
-              console.error('WebSocket error:', error);
-              setConnectionStatus('error');
-          };
-      };
-
-      connect();
-
-      // Cleanup on component unmount
-      return () => {
-          if (ws) {
-              ws.close();
-          }
-          if (reconnectTimeout) {
-              clearTimeout(reconnectTimeout);
-          }
-      };
-  }, []);
+export default function TrainList() {
+    const { trains, connectionStatus } = useTrains();
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -137,5 +74,3 @@ const TrainList = () => {
         </div>
     );
 };
-
-export default TrainList;
